@@ -1,0 +1,65 @@
+{
+  "model": "TF-IDF character (2-5) + word (1-2) n-grams + LinearSVC C=1.5 class_weight=balanced",
+  "is_llm": false,
+  "dataset": "provisional heuristic labels; 0 human-reviewed rows",
+  "warning": "These metrics measure agreement with provisional heuristic labels, not true real-world accuracy. They do not validate the >96% requirement.",
+  "rows": {
+    "train": 1574,
+    "validation": 317,
+    "test": 322
+  },
+  "label_counts": {
+    "train": {
+      "HINGLISH": 1011,
+      "ENGLISH": 334,
+      "NEUTRAL": 154,
+      "UNCERTAIN": 75
+    },
+    "validation": {
+      "HINGLISH": 201,
+      "ENGLISH": 71,
+      "NEUTRAL": 31,
+      "UNCERTAIN": 14
+    },
+    "test": {
+      "HINGLISH": 200,
+      "ENGLISH": 72,
+      "NEUTRAL": 33,
+      "UNCERTAIN": 17
+    }
+  },
+  "test_accuracy": 0.9472049689440993,
+  "test_macro_f1": 0.8660480684811238,
+  "test_weighted_f1": 0.9415662280486496,
+  "validation_accuracy": 0.9463722397476341,
+  "validation_macro_f1": 0.9075767068371763,
+  "fit_seconds": 0.14859869199995046,
+  "test_prediction_seconds": 0.016134419000081834,
+  "test_prediction_ms_per_utterance": 0.05010689130460197,
+  "test_classification_report": {
+    "HINGLISH": {
+      "precision": 0.94,
+      "recall": 0.98,
+      "f1-score": 0.96,
+      "support": 200
+    },
+    "ENGLISH": {
+      "precision": 0.96,
+      "recall": 0.96,
+      "f1-score": 0.96,
+      "support": 72
+    },
+    "NEUTRAL": {
+      "precision": 0.97,
+      "recall": 1,
+      "f1-score": 0.99,
+      "support": 33
+    },
+    "UNCERTAIN": {
+      "precision": 0.88,
+      "recall": 0.41,
+      "f1-score": 0.56,
+      "support": 17
+    }
+  }
+}
