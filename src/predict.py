@@ -50,16 +50,11 @@ class LanguageSwitchClassifier:
             return_tensors="pt",
             return_dict=True,
         )
-        # Recent Transformers versions may return a BatchEncoding rather than
-        # a bare tensor. Pass model input tensors as keyword arguments.
-        if isinstance(encoded, dict):
-            model_inputs = {
-                key: value.to(self.device)
-                for key, value in encoded.items()
-                if key in ("input_ids", "attention_mask")
-            }
-        else:
-            model_inputs = {"input_ids": encoded.to(self.device)}
+        # apply_chat_template(return_dict=True) returns a BatchEncoding.
+        # Extract its tensors explicitly; do not pass the wrapper as input_ids.
+        model_inputs = {"input_ids": encoded["input_ids"].to(self.device)}
+        if "attention_mask" in encoded:
+            model_inputs["attention_mask"] = encoded["attention_mask"].to(self.device)
         input_ids = model_inputs["input_ids"]
         with torch.inference_mode():
             output = self.model.generate(
