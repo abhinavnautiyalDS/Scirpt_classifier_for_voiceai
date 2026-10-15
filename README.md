@@ -2,7 +2,7 @@
 
 A small language-identification model and policy layer for voice agents that need to decide whether a caller is speaking **Hinglish/Hindi**, **English**, or whether there is not enough evidence to switch.
 
-> **Status:** starter repository. No model has been trained or validated yet. Accuracy targets (including >96%) are goals, not claims. Heuristic or automatically generated labels are not ground truth.
+> **Status:** experimental LoRA adapter trained. A provisional test run reported 96.58% accuracy and 0.9427 macro-F1 on 322 automatically labeled samples. These are agreement metrics against heuristic labels, not human-reviewed real-world accuracy. The adapter must be placed under `models/qwen-hinglish-lora/` for the Streamlit app to load it.
 
 ## Intended labels
 
@@ -24,7 +24,7 @@ The model identifies the utterance; a separate controller decides whether switch
 - `src/train_lora.py` — Qwen2.5-0.5B-Instruct LoRA fine-tuning starter.
 - `src/predict.py` — inference wrapper for a fine-tuned adapter.
 - `src/evaluate.py` — held-out metrics and confusion matrix.
-- `app.py` — Streamlit playground for manual utterance checks.
+- `app.py` — Streamlit playground for manual utterance checks. It expects the extracted adapter in `models/qwen-hinglish-lora/` or `HINGLISH_MODEL_PATH` to point to an adapter directory.
 - `tests/test_policy.py` and `tests/test_extract_callers.py` — basic policy and parser tests.
 - `docs/voice_pipeline.md` — integration flow and switching safeguards.
 - `data/example_utterances.csv` — small synthetic examples for schema smoke tests only; not a training benchmark.
@@ -87,6 +87,21 @@ Launch the manual playground:
 ```bash
 streamlit run app.py
 ```
+
+### Run the fine-tuned adapter in Streamlit
+
+Extract the downloaded model ZIP and copy only the **top-level adapter files** into `models/qwen-hinglish-lora/`:
+
+- `adapter_config.json`
+- `adapter_model.safetensors`
+- `tokenizer.json`
+- `tokenizer_config.json`
+- `chat_template.jinja` (if present)
+- `README.md` (optional model notes)
+
+Do not copy `checkpoint-198/`, `checkpoint-297/`, optimizer states, RNG states, or training checkpoints into the app directory. They are not needed for inference and make the repository unnecessarily large. The repository's `.gitignore` excludes model weights by default, so use `git add -f models/qwen-hinglish-lora/adapter_model.safetensors` when deliberately adding the trained adapter.
+
+On Streamlit Community Cloud, select `app.py` as the entry point. The app downloads the base model `Qwen/Qwen2.5-0.5B-Instruct` when it first loads; cold start can take time and the available RAM may be a limitation. Keep the repository and model weights private if the data or model is not intended for public redistribution.
 
 Training can be GPU-intensive. Fine-tuning is intended for a GPU; CPU inference should be benchmarked on the target machine. Do not treat validation metrics on automatically labeled data as a reliable accuracy estimate.
 
