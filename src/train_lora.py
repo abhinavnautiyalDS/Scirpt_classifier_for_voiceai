@@ -147,7 +147,6 @@ def main():
         gradient_accumulation_steps=args.grad_accumulation,
         learning_rate=args.learning_rate,
         weight_decay=0.01,
-        warmup_ratio=0.05,
         logging_steps=10,
         eval_strategy="epoch",
         save_strategy="epoch",
