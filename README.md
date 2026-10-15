@@ -18,12 +18,16 @@ The model identifies the utterance; a separate controller decides whether switch
 ## Repository layout
 
 - `data/README.md` — dataset schema, annotation guide, and privacy guidance.
+- `src/extract_callers.py` — extract caller turns only from timestamped plain-text call transcripts.
 - `src/prepare_data.py` — validate labeled CSVs and create reproducible splits.
+- `src/policy.py` — neutral phrase override and consecutive-confirmation switch controller.
 - `src/train_lora.py` — Qwen2.5-0.5B-Instruct LoRA fine-tuning starter.
 - `src/predict.py` — inference wrapper for a fine-tuned adapter.
 - `src/evaluate.py` — held-out metrics and confusion matrix.
 - `app.py` — Streamlit playground for manual utterance checks.
-- `tests/test_policy.py` — policy behavior checks.
+- `tests/test_policy.py` and `tests/test_extract_callers.py` — basic policy and parser tests.
+- `docs/voice_pipeline.md` — integration flow and switching safeguards.
+- `data/example_utterances.csv` — small synthetic examples for schema smoke tests only; not a training benchmark.
 - `requirements.txt` — project dependencies.
 
 ## Dataset format
@@ -48,10 +52,22 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Prepare your **human-reviewed** CSV at `data/utterances.csv`:
+First, extract caller turns from your local transcript file (do not commit real transcripts or extracted caller text to this public repository):
+
+```bash
+python src/extract_callers.py --input /path/to/call_transcript.txt --output /private/path/caller_turns.csv
+```
+
+Add and human-review labels in a private CSV at `data/utterances.csv` using the schema in `data/README.md`. Mark `reviewed=true` only after checking each label. Then prepare your **human-reviewed** splits:
 
 ```bash
 python src/prepare_data.py --input data/utterances.csv --output-dir data/splits --require-reviewed
+```
+
+Run basic tests:
+
+```bash
+pytest -q
 ```
 
 Fine-tune on a machine with a supported GPU:
@@ -79,8 +95,8 @@ Training can be GPU-intensive. Fine-tuning is intended for a GPU; CPU inference 
 1. Split by call or speaker/session group when possible, not random utterance alone.
 2. Human-review labels, especially code-mixed, short, noisy, and unsupported-language examples.
 3. Keep a locked test set that is not used for prompt/model selection.
-4. Report macro-F1, per-class precision/recall/F1, confusion matrix, and latency on the target CPU.
-5. Measure switch false positives separately for neutral phrases and single-word fragments.
+4. Report macro-F1, per-class precision/recall/F1, confusion matrix, neutral false-switch rate, and latency on the target CPU.
+5. Use `LanguageSwitchController` in `src/policy.py` to keep neutral/uncertain turns from switching and require repeated candidate labels. Tune its thresholds with held-out call-level tests.
 6. Only claim the >96% target if a representative human-reviewed held-out test set supports it.
 
 ## License
