@@ -1,5 +1,6 @@
 """Streamlit playground for the fine-tuned Hinglish language-switch adapter."""
 import os
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -43,12 +44,22 @@ if run:
         )
     else:
         try:
-            with st.spinner("Classifying…"):
-                result = load_classifier(str(model_path), base_model).classify(
+            with st.spinner("Loading model if needed and classifying…"):
+                # Keep one-time model loading separate from per-utterance inference latency.
+                classifier = load_classifier(str(model_path), base_model)
+                start_time = time.perf_counter()
+                result = classifier.classify(
                     utterance, current_language=current_language
                 )
+                latency_ms = (time.perf_counter() - start_time) * 1000
+
             st.subheader("Prediction")
             st.metric("Predicted label", result["label"])
+            st.metric("Inference latency", f"{latency_ms:.2f} ms")
+            st.caption(
+                "Inference latency measures classification after the model is loaded; "
+                "it excludes initial model download/loading time."
+            )
             st.write(
                 "**Switch candidate:**",
                 "Yes — apply your switching-controller checks"
