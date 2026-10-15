@@ -1,0 +1,11 @@
+text,label,call_id,reviewed
+"मुझे details भेज दीजिए",HINGLISH,example-1,true
+"Mujhe details WhatsApp kar dena",HINGLISH,example-2,true
+"Please send me the details tomorrow",ENGLISH,example-3,true
+"Hello",NEUTRAL,example-4,true
+"Okay",NEUTRAL,example-5,true
+"ನನಗೆ ಸಹಾಯ ಬೇಕು",UNCERTAIN,example-6,true
+"मुझे pricing के बारे में बताइए",HINGLISH,example-7,true
+"I would like to know the available plans",ENGLISH,example-8,true
+"हाँ",NEUTRAL,example-9,true
+"తెలుగు లో మాట్లాడండి",UNCERTAIN,example-10,true
