@@ -82,6 +82,10 @@ class LabelDataset(Dataset):
         )
 
 
+    def __len__(self):
+        return len(self.rows)
+
+
 @dataclass
 class CompletionCollator:
     tokenizer: object
