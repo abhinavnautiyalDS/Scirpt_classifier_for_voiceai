@@ -43,12 +43,29 @@ class LanguageSwitchClassifier:
             {"role": "system", "content": INSTRUCTION},
             {"role": "user", "content": clean},
         ]
-        input_ids = self.tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        ).to(self.device)
+        encoded = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        )
+        # Recent Transformers versions may return a BatchEncoding rather than
+        # a bare tensor. Pass model input tensors as keyword arguments.
+        if isinstance(encoded, dict):
+            model_inputs = {
+                key: value.to(self.device)
+                for key, value in encoded.items()
+                if key in ("input_ids", "attention_mask")
+            }
+        else:
+            model_inputs = {"input_ids": encoded.to(self.device)}
+        input_ids = model_inputs["input_ids"]
         with torch.inference_mode():
             output = self.model.generate(
-                input_ids, max_new_tokens=5, do_sample=False,
+                **model_inputs,
+                max_new_tokens=5,
+                do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         answer = self.tokenizer.decode(
