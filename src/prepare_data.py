@@ -20,8 +20,10 @@ def split_data(df: pd.DataFrame, seed: int):
     df = df.reset_index(drop=True)
     if "call_id" in df.columns:
         groups = df["call_id"].fillna("").astype(str)
-        if (groups != "").any() and groups.nunique() >= 7:
-            groups = groups.where(groups != "", pd.Series([f"row-{i}" for i in range(len(df))]))
+        # Give missing call IDs unique row groups so unrelated rows do not collapse together.
+        groups = groups.where(groups != "", pd.Series([f"row-{i}" for i in range(len(df))]))
+        df["call_id"] = groups
+        if groups.nunique() >= 7:
             splitter = StratifiedGroupKFold(n_splits=7, shuffle=True, random_state=seed)
             folds = []
             for _, fold_idx in splitter.split(df, df["label"], groups=groups):
