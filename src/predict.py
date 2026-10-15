@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Inference helper. A predicted label is not itself permission to switch languages."""
+"""Inference helper. Classification and permission to switch are separate concerns."""
 from __future__ import annotations
 
 import argparse
 import re
-from dataclasses import dataclass
 
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-LABELS = ("HINGLISH", "ENGLISH", "NEUTRAL", "UNCERTAIN")
+try:
+    from .policy import apply_switch_policy
+except ImportError:
+    from policy import apply_switch_policy
+
 DEFAULT_BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 INSTRUCTION = (
     "Classify the caller utterance for a voice-agent language switch. "
@@ -19,18 +22,6 @@ INSTRUCTION = (
     "or too little language evidence to trigger a switch. UNCERTAIN means unsupported "
     "language or unclear/ambiguous content. Return exactly one label and no explanation."
 )
-NEUTRAL_PHRASES = {
-    "hi", "hello", "hey", "bye", "goodbye", "good bye", "good morning", "good evening",
-    "okay", "ok", "yes", "yeah", "yep", "no", "nope", "right", "sure", "hmm", "mm",
-    "thank you", "thanks", "ठीक है", "हाँ", "हां", "नहीं", "अच्छा", "जी", "हेलो", "नमस्ते",
-}
-
-
-@dataclass
-class Prediction:
-    label: str
-    switch_allowed: bool
-    reason: str
 
 
 class LanguageSwitchClassifier:
@@ -41,12 +32,12 @@ class LanguageSwitchClassifier:
         self.model = PeftModel.from_pretrained(base, adapter_path)
         self.model.to(self.device).eval()
 
-    def classify(self, text: str, current_language: str | None = None) -> Prediction:
-        clean = re.sub(r"\s+", " ", text).strip()
+    def classify(self, text: str, current_language: str | None = None) -> dict:
+        clean = re.sub(r"\s+", " ", str(text or "")).strip()
         if not clean:
-            return Prediction("UNCERTAIN", False, "empty utterance")
-        if clean.casefold().strip(" .!?") in NEUTRAL_PHRASES:
-            return Prediction("NEUTRAL", False, "generic neutral phrase override")
+            policy = apply_switch_policy(clean, "UNCERTAIN")
+            return {"label": policy.label, "switch_candidate": False, "reason": policy.reason}
+
         messages = [
             {"role": "system", "content": INSTRUCTION},
             {"role": "user", "content": clean},
@@ -59,15 +50,17 @@ class LanguageSwitchClassifier:
                 input_ids, max_new_tokens=5, do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
-        answer = self.tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True).strip().upper()
+        answer = self.tokenizer.decode(
+            output[0][input_ids.shape[1]:], skip_special_tokens=True
+        ).strip().upper()
         match = re.search(r"\b(HINGLISH|ENGLISH|NEUTRAL|UNCERTAIN)\b", answer)
-        label = match.group(1) if match else "UNCERTAIN"
-        if label in {"NEUTRAL", "UNCERTAIN"}:
-            return Prediction(label, False, "label does not permit switching")
-        words = re.findall(r"\w+", clean, flags=re.UNICODE)
-        if len(words) < 3:
-            return Prediction(label, False, "too short to trigger a language switch")
-        return Prediction(label, True, "candidate only; production controller must check confidence and stability")
+        predicted = match.group(1) if match else "UNCERTAIN"
+        policy = apply_switch_policy(clean, predicted)
+        return {
+            "label": policy.label,
+            "switch_candidate": policy.switch_candidate,
+            "reason": policy.reason,
+        }
 
 
 def main():
@@ -77,7 +70,7 @@ def main():
     parser.add_argument("--text", required=True)
     args = parser.parse_args()
     result = LanguageSwitchClassifier(args.model, args.base_model).classify(args.text)
-    print({"label": result.label, "switch_allowed": result.switch_allowed, "reason": result.reason})
+    print(result)
 
 
 if __name__ == "__main__":
