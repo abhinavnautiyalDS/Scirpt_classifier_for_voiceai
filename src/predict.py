@@ -14,6 +14,7 @@ try:
 except ImportError:
     from policy import apply_switch_policy
 
+LABELS = ("HINGLISH", "ENGLISH", "NEUTRAL", "UNCERTAIN")
 DEFAULT_BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 INSTRUCTION = (
     "Classify the caller utterance for a voice-agent language switch. "
