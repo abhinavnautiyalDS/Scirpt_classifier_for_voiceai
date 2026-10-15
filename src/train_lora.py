@@ -33,34 +33,53 @@ class LabelDataset(Dataset):
         df = pd.read_csv(path).fillna({"text": "", "label": ""})
         if not {"text", "label"}.issubset(df.columns):
             raise ValueError(f"{path} must contain text,label columns")
-        skipped = 0
+
+        skipped_long = 0
+        skipped_invalid = 0
+        skipped_no_target = 0
         for row in df.itertuples(index=False):
             text, label = str(row.text).strip(), str(row.label).strip().upper()
             if not text or label not in LABELS:
+                skipped_invalid += 1
                 continue
+
             prompt = [
                 {"role": "system", "content": INSTRUCTION},
                 {"role": "user", "content": text},
             ]
-            full = prompt + [{"role": "assistant", "content": label}]
-            prefix_ids = tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True)
-            full_ids = tokenizer.apply_chat_template(full, tokenize=True, add_generation_prompt=False)
-            if len(full_ids) > max_length:
-                skipped += 1
+            # Render the prompt once, then append the target label. Tokenize the
+            # combined string with offsets so masking does not depend on two
+            # independently templated sequences having identical lengths.
+            prompt_text = tokenizer.apply_chat_template(
+                prompt, tokenize=False, add_generation_prompt=True
+            )
+            full_text = prompt_text + label + (tokenizer.eos_token or "")
+            encoded = tokenizer(
+                full_text,
+                add_special_tokens=False,
+                return_offsets_mapping=True,
+            )
+            input_ids = encoded["input_ids"]
+            offsets = encoded["offset_mapping"]
+            if len(input_ids) > max_length:
+                skipped_long += 1
                 continue
-            target_labels = list(full_ids)
-            target_labels[:len(prefix_ids)] = [-100] * len(prefix_ids)
-            if all(token == -100 for token in target_labels):
+
+            answer_start = len(prompt_text)
+            target_labels = [
+                token_id if end > answer_start else -100
+                for token_id, (begin, end) in zip(input_ids, offsets)
+            ]
+            if not any(token != -100 for token in target_labels):
+                skipped_no_target += 1
                 continue
-            self.rows.append({"input_ids": full_ids, "labels": target_labels})
-        if skipped:
-            print(f"Skipped {skipped} rows longer than max_length={max_length}; review if this is substantial.")
+            self.rows.append({"input_ids": input_ids, "labels": target_labels})
 
-    def __len__(self):
-        return len(self.rows)
-
-    def __getitem__(self, index):
-        return self.rows[index]
+        print(
+            f"{path}: rows={len(df)}, usable={len(self.rows)}, "
+            f"skipped_long={skipped_long}, skipped_invalid={skipped_invalid}, "
+            f"skipped_no_target={skipped_no_target}"
+        )
 
 
 @dataclass
