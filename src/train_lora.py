@@ -85,6 +85,9 @@ class LabelDataset(Dataset):
     def __len__(self):
         return len(self.rows)
 
+    def __getitem__(self, index):
+        return self.rows[index]
+
 
 @dataclass
 class CompletionCollator:
