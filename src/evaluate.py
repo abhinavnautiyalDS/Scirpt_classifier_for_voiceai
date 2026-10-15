@@ -45,7 +45,7 @@ def main():
         start = time.perf_counter()
         result = classifier.classify(text)
         latencies.append((time.perf_counter() - start) * 1000)
-        predictions.append(result.label)
+        predictions.append(result["label"])
     report = classification_report(
         df["label"], predictions, labels=list(LABELS), output_dict=True, zero_division=0
     )
