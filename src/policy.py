@@ -35,7 +35,7 @@ def apply_switch_policy(text: str, predicted_label: str, min_words: int = 3) -> 
         return PolicyResult("UNCERTAIN", False, "invalid model label")
     if not clean:
         return PolicyResult("UNCERTAIN", False, "empty utterance")
-    canonical = re.sub(r"[^\\w\\s]", "", clean.casefold()).strip()
+    canonical = re.sub(r"[^\w\s]", "", clean.casefold()).strip()
     if canonical in NEUTRAL_PHRASES:
         return PolicyResult("NEUTRAL", False, "generic neutral phrase override")
     if label in {"NEUTRAL", "UNCERTAIN"}:
