@@ -172,7 +172,7 @@ def extract_comi(path, split, records, report):
 def norm_key(text):
     # Case- and punctuation-insensitive key for duplicate detection, while retaining original text.
     value = clean(text).casefold()
-    value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
+    value = re.sub(r"[^\w\u0900-\u097f]+", " ", value, flags=re.UNICODE)
     return WS_RE.sub(" ", value).strip()
 
 
