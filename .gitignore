@@ -15,3 +15,8 @@ outputs/
 *.pt
 *.pth
 .DS_Store
+
+# Downloaded source datasets and generated audit artifacts
+data/raw/
+data/interim/
+data/processed/
