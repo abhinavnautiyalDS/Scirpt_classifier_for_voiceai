@@ -21,7 +21,7 @@ import ast
 import json
 import re
 import unicodedata
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -185,7 +185,7 @@ def main():
             "trilingual_hinge": "Hindi columns retained only if Devanagari present; English columns retained only if Latin-only",
             "comi": "Intact mixed-script sentence; at least 2/3 human annotators must include both hi and en tags",
             "romanized_hinglish_columns": "excluded",
-            "split": "group-aware 80/10/10; exact duplicates and aligned Trilingual row variants grouped",
+            "split": "random group-aware 80/10/10 across all retained candidates; normalized duplicates and aligned Trilingual row variants grouped; source train/test labels do not dictate final partitions",
         }
     }
 
@@ -262,26 +262,27 @@ def main():
         union("text:" + tkey, "source:" + str(row["group_id"]))
     dedup["split_group"] = dedup["norm_key"].map(lambda k: find("text:" + k))
 
-    # Use source-original test records as test candidates when possible. If a
-    # deduplicated item appears in any original test split, reserve its whole group
-    # for test. Split remaining groups into train/validation.
-    original_test_keys = set()
-    for _, row in cand.iterrows():
-        if row["source_split"] == "test":
-            original_test_keys.add(norm_key(row["text"]))
-    test_groups = set(dedup.loc[dedup["norm_key"].isin(original_test_keys), "split_group"])
-    dedup["partition"] = dedup["split_group"].map(lambda g: "test" if g in test_groups else "pool")
+    # Split all retained groups together so the final partitions target 80/10/10.
+    # This avoids accidentally inflating test size by reserving every row that came
+    # from a source dataset's test split. Exact duplicates and aligned Trilingual
+    # language pairs are already connected through split_group.
+    if dedup["split_group"].nunique() < 3:
+        raise RuntimeError("At least three independent split groups are required.")
 
-    pool = dedup[dedup["partition"] == "pool"].copy()
-    if len(pool) > 1 and pool["split_group"].nunique() > 1:
-        splitter = GroupShuffleSplit(n_splits=1, test_size=0.111111, random_state=42)
-        train_idx, val_idx = next(splitter.split(pool, groups=pool["split_group"]))
-        train_groups = set(pool.iloc[train_idx]["split_group"])
-        val_groups = set(pool.iloc[val_idx]["split_group"])
-        dedup.loc[dedup["split_group"].isin(train_groups), "partition"] = "train"
-        dedup.loc[dedup["split_group"].isin(val_groups), "partition"] = "validation"
-    else:
-        dedup.loc[dedup["partition"] == "pool", "partition"] = "train"
+    test_splitter = GroupShuffleSplit(n_splits=1, test_size=0.10, random_state=42)
+    pool_idx, test_idx = next(test_splitter.split(dedup, groups=dedup["split_group"]))
+    test_groups = set(dedup.iloc[test_idx]["split_group"])
+    pool = dedup.iloc[pool_idx].copy()
+    dedup["partition"] = "pool"
+    dedup.loc[dedup["split_group"].isin(test_groups), "partition"] = "test"
+
+    # Validation should be 10% of the full dataset: 10/90 = 1/9 of the remaining pool.
+    val_splitter = GroupShuffleSplit(n_splits=1, test_size=(1 / 9), random_state=43)
+    train_idx, val_idx = next(val_splitter.split(pool, groups=pool["split_group"]))
+    train_groups = set(pool.iloc[train_idx]["split_group"])
+    val_groups = set(pool.iloc[val_idx]["split_group"])
+    dedup.loc[dedup["split_group"].isin(train_groups), "partition"] = "train"
+    dedup.loc[dedup["split_group"].isin(val_groups), "partition"] = "validation"
 
     # Final files have exactly the requested two columns.
     for part in ["train", "validation", "test"]:
