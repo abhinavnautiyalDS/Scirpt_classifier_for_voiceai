@@ -45,10 +45,10 @@ def main():
     model.eval()
 
     def infer(text):
+        start = time.perf_counter()
         inputs = tokenizer(
             text, return_tensors="pt", truncation=True, max_length=args.max_length
         )
-        start = time.perf_counter()
         with torch.inference_mode():
             logits = model(**inputs).logits
             probs = torch.softmax(logits, dim=-1)[0]
@@ -87,7 +87,7 @@ def main():
         },
         "throughput_utterances_per_second": round(len(texts) / elapsed, 2) if elapsed else None,
         "model_directory_size_mb": round(size_bytes / (1024 * 1024), 3),
-        "note": "Latency measures model forward pass only; tokenization is excluded from each timed interval. Use the same benchmark for baseline and fine-tuned models.",
+        "note": "Latency is end-to-end per utterance, including tokenization and CPU model forward pass. Use the same benchmark, input CSV, sample count, and thread count for baseline and fine-tuned models.",
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
