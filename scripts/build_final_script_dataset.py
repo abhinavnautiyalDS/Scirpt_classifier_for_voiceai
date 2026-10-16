@@ -170,7 +170,10 @@ def extract_comi(path, split, records, report):
 
 
 def norm_key(text):
-    return clean(text).casefold()
+    # Case- and punctuation-insensitive key for duplicate detection, while retaining original text.
+    value = clean(text).casefold()
+    value = re.sub(r"[^\\w\\u0900-\\u097f]+", " ", value, flags=re.UNICODE)
+    return WS_RE.sub(" ", value).strip()
 
 
 def main():
@@ -211,12 +214,16 @@ def main():
     # labels, drop it from training and record it rather than guessing.
     dedupe_rows = []
     conflicts = []
+    conflict_candidate_rows = 0
+    collapsed_exact_duplicates = 0
     for key, group in cand.groupby("norm_key", sort=False):
         labels = set(group["script"])
         if len(labels) != 1:
+            conflict_candidate_rows += len(group)
             conflicts.append({"norm_key": key, "texts": group["text"].head(3).tolist(),
                               "labels": sorted(labels), "sources": sorted(set(group["source_dataset"]))})
             continue
+        collapsed_exact_duplicates += len(group) - 1
         row = group.iloc[0].to_dict()
         row["source_dataset"] = ";".join(sorted(set(group["source_dataset"])))
         row["source_splits"] = ";".join(sorted(set(group["source_split"])))
@@ -245,11 +252,12 @@ def main():
             parent[rb] = ra
 
     text_keys = list(dedup["norm_key"])
+    text_keys_set = set(text_keys)
     for key in text_keys:
         find("text:" + key)
     for _, row in cand.iterrows():
         tkey = norm_key(row["text"])
-        if tkey not in set(text_keys):
+        if tkey not in text_keys_set:
             continue
         union("text:" + tkey, "source:" + str(row["group_id"]))
     dedup["split_group"] = dedup["norm_key"].map(lambda k: find("text:" + k))
@@ -290,8 +298,9 @@ def main():
     report["deduplication"] = {
         "candidate_rows_before_dedup": int(len(cand)),
         "conflicting_text_groups_excluded": int(len(conflicts)),
+        "candidate_rows_excluded_for_label_conflicts": int(conflict_candidate_rows),
         "rows_after_exact_dedup": int(len(dedup)),
-        "duplicates_collapsed": int(len(cand) - len(dedup) - sum(1 for c in conflicts)),
+        "duplicates_collapsed": int(collapsed_exact_duplicates),
     }
     report["final_partitions"] = {}
     for part in ["train", "validation", "test"]:
