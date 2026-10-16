@@ -19,18 +19,18 @@ OUT = Path("data/processed/script_classifier")
 META = Path("data/interim/script_classifier/deduplicated_candidates_with_metadata.csv")
 REPORT_PATH = OUT / "validation_report.json"
 PARTS = ("train", "validation", "test")
-DEV_RE = re.compile(r"[\\u0900-\\u097F]")
+DEV_RE = re.compile(r"[\u0900-\u097F]")
 LAT_RE = re.compile(r"[A-Za-z]")
-WS_RE = re.compile(r"\\s+")
+WS_RE = re.compile(r"\s+")
 
 
 def clean(value: object) -> str:
-    return WS_RE.sub(" ", unicodedata.normalize("NFC", str(value)).replace("\\ufeff", "")).strip()
+    return WS_RE.sub(" ", unicodedata.normalize("NFC", str(value)).replace("\ufeff", "")).strip()
 
 
 def norm_key(text: object) -> str:
     value = clean(text).casefold()
-    value = re.sub(r"[^\\w]+", " ", value, flags=re.UNICODE)
+    value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
     return WS_RE.sub(" ", value).strip()
 
 
@@ -153,7 +153,7 @@ def main() -> int:
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    print(f"\\nValidation report: {REPORT_PATH}")
+    print(f"\nValidation report: {REPORT_PATH}")
     return 0 if not errors else 1
 
 
