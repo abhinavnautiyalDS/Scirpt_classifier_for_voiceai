@@ -35,13 +35,12 @@ def count_script_letters(text: str) -> tuple[int, int]:
 
 def dominant_script(text: str, model_prediction: str) -> str:
     devanagari, latin = count_script_letters(text)
-    if devanagari > latin:
+    # Product rule: any Devanagari in a mixed-script utterance takes priority.
+    if devanagari > 0:
         return "DEVANAGARI"
-    if latin > devanagari:
+    if latin > 0:
         return "LATIN"
-    if devanagari == 0 and latin == 0:
-        return "NO_LETTERS"
-    return model_prediction  # use BERT only for exact ties
+    return "NO_LETTERS"
 
 
 @st.cache_resource(show_spinner="Loading fine-tuned BERT-Tiny model…")
@@ -139,7 +138,7 @@ if classify:
             c2.metric("BERT model prediction", model_prediction)
             st.caption(
                 f"Unicode letter counts — Devanagari: {devanagari_count}, Latin: {latin_count}. "
-                "Final label follows the larger letter count; exact ties use BERT."
+                "Any Devanagari letters take priority in mixed-script text; otherwise Latin letters map to LATIN."
             )
             st.metric("Inference latency", f"{latency_ms:.2f} ms")
             st.caption(
