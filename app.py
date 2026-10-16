@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+import pandas as pd
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -122,7 +123,7 @@ if classify:
                 "and are not guaranteed to be calibrated."
             )
             st.markdown("### Class probabilities")
-            st.bar_chart({"Probability": scores})
+            st.bar_chart(pd.DataFrame({"Class": list(scores.keys()), "Probability": list(scores.values())}).set_index("Class"))
             st.write(
                 "**Interpretation:** "
                 + (
