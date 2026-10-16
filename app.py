@@ -21,10 +21,28 @@ MAX_LENGTH = 96
 st.title("Hinglish Script Classifier")
 st.caption("Fine-tuned BERT-Tiny · DEVANAGARI vs LATIN")
 st.info(
-    "This model predicts the writing script, not the spoken language. "
-    "Hindi/Hinglish written in Latin characters may be classified as LATIN; "
-    "that does not mean the utterance is English."
+    "This app reports the dominant writing script, not the spoken language. "
+    "For mixed-script text, the final label follows Unicode letter counts. "
+    "The BERT prediction and probabilities are shown separately for comparison."
 )
+
+def count_script_letters(text: str) -> tuple[int, int]:
+    """Count Devanagari and Latin Unicode letters, ignoring punctuation/digits."""
+    devanagari = sum(1 for char in text if 0x0900 <= ord(char) <= 0x097F and char.isalpha())
+    latin = sum(1 for char in text if (0x0041 <= ord(char) <= 0x005A or 0x0061 <= ord(char) <= 0x007A) and char.isalpha())
+    return devanagari, latin
+
+
+def dominant_script(text: str, model_prediction: str) -> str:
+    devanagari, latin = count_script_letters(text)
+    if devanagari > latin:
+        return "DEVANAGARI"
+    if latin > devanagari:
+        return "LATIN"
+    if devanagari == 0 and latin == 0:
+        return "NO_LETTERS"
+    return model_prediction  # use BERT only for exact ties
+
 
 @st.cache_resource(show_spinner="Loading fine-tuned BERT-Tiny model…")
 def load_classifier(model_dir: str):
@@ -111,12 +129,18 @@ if classify:
                     str(id2label.get(i, id2label.get(str(i), f"LABEL_{i}"))).upper(): float(p)
                     for i, p in enumerate(values)
                 }
-                prediction = max(scores, key=scores.get)
+                model_prediction = max(scores, key=scores.get)
+                devanagari_count, latin_count = count_script_letters(utterance.strip())
+                prediction = dominant_script(utterance.strip(), model_prediction)
 
-            st.subheader("Prediction")
+            st.subheader("Final prediction")
             c1, c2 = st.columns(2)
             c1.metric("Predicted script", prediction)
-            c2.metric("Top-class score", f"{scores[prediction]:.2%}")
+            c2.metric("BERT model prediction", model_prediction)
+            st.caption(
+                f"Unicode letter counts — Devanagari: {devanagari_count}, Latin: {latin_count}. "
+                "Final label follows the larger letter count; exact ties use BERT."
+            )
             st.metric("Inference latency", f"{latency_ms:.2f} ms")
             st.caption(
                 "Latency excludes first-time model loading. Scores are softmax probabilities "
@@ -127,14 +151,19 @@ if classify:
             st.write(
                 "**Interpretation:** "
                 + (
-                    "Devanagari characters were predicted as the dominant script."
+                    "Devanagari is the dominant writing script in this text."
                     if prediction == "DEVANAGARI"
-                    else "Latin characters were predicted as the dominant script."
+                    else "Latin is the dominant writing script in this text."
+                    if prediction == "LATIN"
+                    else "No Devanagari or Latin letters were found."
                 )
             )
             st.code(
                 f"Input: {utterance.strip()}\n"
-                f"Prediction: {prediction}\n"
+                f"Final prediction: {prediction}\n"
+                f"BERT prediction: {model_prediction}\n"
+                f"Devanagari letter count: {devanagari_count}\n"
+                f"Latin letter count: {latin_count}\n"
                 f"Probabilities: {scores}\n"
                 f"Inference latency: {latency_ms:.2f} ms",
                 language="text",
