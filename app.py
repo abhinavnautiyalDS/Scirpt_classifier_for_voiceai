@@ -1,78 +1,159 @@
-"""Streamlit playground for the fine-tuned Hinglish language-switch adapter."""
-import os
+"""Streamlit playground for the fine-tuned BERT-Tiny script classifier."""
+from __future__ import annotations
+
 import time
 from pathlib import Path
 
 import streamlit as st
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-st.set_page_config(page_title="Hinglish Language Switch LLM", page_icon="🗣️", layout="centered")
+st.set_page_config(
+    page_title="Hinglish Script Classifier",
+    page_icon="🔤",
+    layout="centered",
+)
 
-DEFAULT_MODEL_PATH = Path(__file__).parent / "models" / "qwen-hinglish-lora"
-model_path = Path(os.environ.get("HINGLISH_MODEL_PATH", str(DEFAULT_MODEL_PATH)))
-base_model = os.environ.get("HINGLISH_BASE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+MODEL_DIR = Path(__file__).parent / "artifacts" / "script_classifier_bert_tiny" / "model"
+MAX_LENGTH = 96
 
-st.title("Hinglish Language Switch LLM")
-st.caption("Experimental four-class classifier for voice-agent transcript snippets.")
-
+st.title("Hinglish Script Classifier")
+st.caption("Fine-tuned BERT-Tiny · DEVANAGARI vs LATIN")
 st.info(
-    "Labels: HINGLISH, ENGLISH, NEUTRAL, UNCERTAIN. "
-    "The classifier proposes a label; a separate policy decides whether to switch languages."
+    "This model predicts the writing script, not the spoken language. "
+    "Hindi/Hinglish written in Latin characters may be classified as LATIN; "
+    "that does not mean the utterance is English."
 )
 
-@st.cache_resource(show_spinner="Loading Qwen base model and LoRA adapter…")
-def load_classifier(path: str, base: str):
-    from src.predict import LanguageSwitchClassifier
-    return LanguageSwitchClassifier(path, base)
+@st.cache_resource(show_spinner="Loading fine-tuned BERT-Tiny model…")
+def load_classifier(model_dir: str):
+    tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_dir, local_files_only=True
+    )
+    labels = {
+        str(model.config.id2label.get(i, model.config.id2label.get(str(i), ""))).upper()
+        for i in range(model.config.num_labels)
+    }
+    if labels != {"DEVANAGARI", "LATIN"}:
+        raise ValueError(f"Unexpected model labels: {labels}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device).eval()
+    return tokenizer, model, device
 
+
+@st.cache_resource
+def get_model_path():
+    return MODEL_DIR
+
+
+st.markdown("### Try a transcript")
 utterance = st.text_area(
-    "Caller utterance",
-    placeholder="Mujhe details WhatsApp kar dena",
+    "Transcript text",
+    placeholder="Eligibility क्या है?",
     height=120,
+    help="Paste one finalized STT transcript. Mixed-script text is supported.",
 )
-current_language = st.selectbox("Current agent language", ["Hinglish", "English"])
-run = st.button("Classify utterance", type="primary", use_container_width=True)
+examples = st.selectbox(
+    "Or try an example",
+    [
+        "Choose an example…",
+        "Eligibility क्या है?",
+        "Mujhe course ki details batao",
+        "मुझे course की details बताओ",
+        "Please call me tomorrow.",
+        "हाँ, ठीक है",
+    ],
+)
+if examples != "Choose an example…" and st.button("Use selected example"):
+    st.session_state["classifier_utterance"] = examples
+    st.rerun()
 
-if run:
+if "classifier_utterance" in st.session_state:
+    utterance = st.text_area(
+        "Selected example",
+        value=st.session_state["classifier_utterance"],
+        height=90,
+        key="selected_classifier_utterance",
+    )
+
+classify = st.button("Classify script", type="primary", use_container_width=True)
+
+if classify:
     if not utterance.strip():
-        st.warning("Enter a caller utterance first.")
-    elif not (model_path / "adapter_config.json").exists():
-        st.error(f"LoRA adapter files were not found at: {model_path}")
+        st.warning("Enter a transcript first.")
+    elif not (MODEL_DIR / "config.json").exists() or not (MODEL_DIR / "model.safetensors").exists():
+        st.error(f"Model files not found in: {MODEL_DIR}")
         st.markdown(
-            "Add the extracted adapter files to models/qwen-hinglish-lora/ in the repository "
-            "or set HINGLISH_MODEL_PATH to the adapter directory. Required files include "
-            "adapter_config.json and adapter_model.safetensors."
+            "Make sure the fine-tuned model files are committed under "
+            "`artifacts/script_classifier_bert_tiny/model/` on the deployed branch."
         )
     else:
         try:
             with st.spinner("Loading model if needed and classifying…"):
-                # Keep one-time model loading separate from per-utterance inference latency.
-                classifier = load_classifier(str(model_path), base_model)
-                start_time = time.perf_counter()
-                result = classifier.classify(
-                    utterance, current_language=current_language
+                tokenizer, model, device = load_classifier(str(MODEL_DIR))
+                encoded = tokenizer(
+                    utterance.strip(),
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=MAX_LENGTH,
                 )
-                latency_ms = (time.perf_counter() - start_time) * 1000
+                encoded = {key: value.to(device) for key, value in encoded.items()}
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device)
+                start = time.perf_counter()
+                with torch.inference_mode():
+                    probabilities = torch.softmax(model(**encoded).logits, dim=-1)[0]
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device)
+                latency_ms = (time.perf_counter() - start) * 1000
+
+                values = probabilities.detach().cpu().tolist()
+                id2label = model.config.id2label
+                scores = {
+                    str(id2label.get(i, id2label.get(str(i), f"LABEL_{i}"))).upper(): float(p)
+                    for i, p in enumerate(values)
+                }
+                prediction = max(scores, key=scores.get)
 
             st.subheader("Prediction")
-            st.metric("Predicted label", result["label"])
+            c1, c2 = st.columns(2)
+            c1.metric("Predicted script", prediction)
+            c2.metric("Top-class score", f"{scores[prediction]:.2%}")
             st.metric("Inference latency", f"{latency_ms:.2f} ms")
             st.caption(
-                "Inference latency measures classification after the model is loaded; "
-                "it excludes initial model download/loading time."
+                "Latency excludes first-time model loading. Scores are softmax probabilities "
+                "and are not guaranteed to be calibrated."
             )
+            st.markdown("### Class probabilities")
+            st.bar_chart({"Probability": scores})
             st.write(
-                "**Switch candidate:**",
-                "Yes — apply your switching-controller checks"
-                if result["switch_candidate"] else "No",
+                "**Interpretation:** "
+                + (
+                    "Devanagari characters were predicted as the dominant script."
+                    if prediction == "DEVANAGARI"
+                    else "Latin characters were predicted as the dominant script."
+                )
             )
-            st.caption(f"Policy reason: {result['reason']}")
+            st.code(
+                f"Input: {utterance.strip()}\n"
+                f"Prediction: {prediction}\n"
+                f"Probabilities: {scores}\n"
+                f"Inference latency: {latency_ms:.2f} ms",
+                language="text",
+            )
         except Exception as exc:
-            st.error(f"Classification failed: {exc}")
+            st.error(f"Classification failed: {type(exc).__name__}: {exc}")
             st.exception(exc)
 
 st.divider()
+st.markdown("### Model details")
+st.write("- Architecture: BERT-Tiny sequence classifier")
+st.write("- Labels: DEVANAGARI and LATIN")
+st.write("- Maximum token length: 96")
+st.write("- Model directory: `artifacts/script_classifier_bert_tiny/model/`")
 st.caption(
-    "Experimental result only. Earlier evaluation reached 96.58% accuracy on 322 provisional "
-    "heuristic-labeled samples; this is not human-reviewed real-world accuracy. "
-    "Latency on Streamlit Cloud will differ from the Colab T4 benchmark."
+    "The reported held-out test score was perfect on the current test split, but this does not "
+    "guarantee performance on real Sarvam transcripts. Evaluate on consented, anonymized call data "
+    "before relying on it for production language routing."
 )
