@@ -1,8 +1,8 @@
 # Hinglish Language Switch LLM
 
-A small language-identification model and policy layer for voice agents that need to decide whether a caller is speaking **Hinglish/Hindi**, **English**, or whether there is not enough evidence to switch.
+This repository contains two related experiments: a fine-tuned **BERT-Tiny script classifier** for `DEVANAGARI` vs `LATIN`, and an experimental Qwen LoRA language-switch classifier/policy prototype.
 
-> **Status:** experimental LoRA adapter trained. A provisional test run reported 96.58% accuracy and 0.9427 macro-F1 on 322 automatically labeled samples. These are agreement metrics against heuristic labels, not human-reviewed real-world accuracy. The adapter must be placed under `models/qwen-hinglish-lora/` for the Streamlit app to load it.
+> **Current Streamlit app:** `app.py` loads the fine-tuned BERT-Tiny model from `artifacts/script_classifier_bert_tiny/model/` and displays its prediction, class probabilities, and inference latency. It does not currently run the four-class Qwen adapter.
 
 ## Intended labels
 
@@ -24,7 +24,7 @@ The model identifies the utterance; a separate controller decides whether switch
 - `src/train_lora.py` — Qwen2.5-0.5B-Instruct LoRA fine-tuning starter.
 - `src/predict.py` — inference wrapper for a fine-tuned adapter.
 - `src/evaluate.py` — held-out metrics and confusion matrix.
-- `app.py` — Streamlit playground for manual utterance checks. It expects the extracted adapter in `models/qwen-hinglish-lora/` or `HINGLISH_MODEL_PATH` to point to an adapter directory.
+- `app.py` — Streamlit playground for the fine-tuned BERT-Tiny script classifier; predicts `DEVANAGARI` or `LATIN`.
 - `tests/test_policy.py` and `tests/test_extract_callers.py` — basic policy and parser tests.
 - `docs/voice_pipeline.md` — integration flow and switching safeguards.
 - `data/example_utterances.csv` — small synthetic examples for schema smoke tests only; not a training benchmark.
@@ -88,20 +88,17 @@ Launch the manual playground:
 streamlit run app.py
 ```
 
-### Run the fine-tuned adapter in Streamlit
+### Run the BERT-Tiny script classifier in Streamlit
 
-Extract the downloaded model ZIP and copy only the **top-level adapter files** into `models/qwen-hinglish-lora/`:
+The fine-tuned model files are committed under `artifacts/script_classifier_bert_tiny/model/`. Install dependencies from `requirements.txt`, then run:
 
-- `adapter_config.json`
-- `adapter_model.safetensors`
-- `tokenizer.json`
-- `tokenizer_config.json`
-- `chat_template.jinja` (if present)
-- `README.md` (optional model notes)
+```bash
+streamlit run app.py
+```
 
-Do not copy `checkpoint-198/`, `checkpoint-297/`, optimizer states, RNG states, or training checkpoints into the app directory. They are not needed for inference and make the repository unnecessarily large. The repository's `.gitignore` excludes model weights by default, so use `git add -f models/qwen-hinglish-lora/adapter_model.safetensors` when deliberately adding the trained adapter.
+On Streamlit Community Cloud, choose this repository and `app.py` as the entry point. The app loads the local model files and shows the predicted script, both class probabilities, and inference latency.
 
-On Streamlit Community Cloud, select `app.py` as the entry point. The app downloads the base model `Qwen/Qwen2.5-0.5B-Instruct` when it first loads; cold start can take time and the available RAM may be a limitation. Keep the repository and model weights private if the data or model is not intended for public redistribution.
+The separate Qwen LoRA prototype remains in `src/` and `models/`, but is not the model used by the current Streamlit app.
 
 Training can be GPU-intensive. Fine-tuning is intended for a GPU; CPU inference should be benchmarked on the target machine. Do not treat validation metrics on automatically labeled data as a reliable accuracy estimate.
 
