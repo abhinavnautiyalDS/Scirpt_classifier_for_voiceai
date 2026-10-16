@@ -48,14 +48,11 @@ def get_model_path():
 
 
 st.markdown("### Try a transcript")
-utterance = st.text_area(
-    "Transcript text",
-    placeholder="Eligibility क्या है?",
-    height=120,
-    help="Paste one finalized STT transcript. Mixed-script text is supported.",
-)
+if "utterance_input" not in st.session_state:
+    st.session_state["utterance_input"] = ""
+
 examples = st.selectbox(
-    "Or try an example",
+    "Or choose an example",
     [
         "Choose an example…",
         "Eligibility क्या है?",
@@ -65,17 +62,16 @@ examples = st.selectbox(
         "हाँ, ठीक है",
     ],
 )
-if examples != "Choose an example…" and st.button("Use selected example"):
-    st.session_state["classifier_utterance"] = examples
-    st.rerun()
+if st.button("Use selected example"):
+    if examples != "Choose an example…":
+        st.session_state["utterance_input"] = examples
 
-if "classifier_utterance" in st.session_state:
-    utterance = st.text_area(
-        "Selected example",
-        value=st.session_state["classifier_utterance"],
-        height=90,
-        key="selected_classifier_utterance",
-    )
+utterance = st.text_area(
+    "Transcript text",
+    key="utterance_input",
+    height=120,
+    help="Paste one finalized STT transcript. Mixed-script text is supported.",
+)
 
 classify = st.button("Classify script", type="primary", use_container_width=True)
 
