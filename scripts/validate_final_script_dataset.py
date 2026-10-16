@@ -30,7 +30,7 @@ def clean(value: object) -> str:
 
 def norm_key(text: object) -> str:
     value = clean(text).casefold()
-    value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
+    value = re.sub(r"[^\w\u0900-\u097f]+", " ", value, flags=re.UNICODE)
     return WS_RE.sub(" ", value).strip()
 
 
