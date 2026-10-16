@@ -27,7 +27,13 @@ def clean(value):
     return WS_RE.sub(" ", unicodedata.normalize("NFC", str(value)).replace("\ufeff", "")).strip()
 
 
-def read_csv(path):
+def read_table(path):
+    if path.suffix.casefold() in {".parquet", ".pq"}:
+        return pd.read_parquet(path)
+    if path.suffix.casefold() in {".jsonl", ".ndjson"}:
+        return pd.read_json(path, lines=True, dtype=False)
+    if path.suffix.casefold() == ".json":
+        return pd.read_json(path, dtype=False)
     return pd.read_csv(path, dtype=object, keep_default_na=False, encoding="utf-8-sig")
 
 
@@ -163,7 +169,7 @@ def main():
     rows, audits, report = [], [], {"sources": {}}
 
     if args.trilingual:
-        df = read_csv(args.trilingual)
+        df = read_table(args.trilingual)
         audits.append(audit(df, "Trilingual Hinglish Corpus"))
         hcol, ecol = find_col(df, ["hindi"]), find_col(df, ["english"])
         if not hcol or not ecol:
@@ -176,7 +182,7 @@ def main():
                                              "excluded": ["hinglish (Romanized)"]}
 
     if args.hinge:
-        df = read_csv(args.hinge)
+        df = read_table(args.hinge)
         audits.append(audit(df, "HinGE"))
         hcol, ecol = find_col(df, ["Hindi"]), find_col(df, ["English"])
         if not hcol or not ecol:
@@ -188,7 +194,7 @@ def main():
                                         "excluded": ["Human-generated Hinglish", "WAC", "PAC"]}
 
     if args.comi_lid:
-        df = read_csv(args.comi_lid)
+        df = read_table(args.comi_lid)
         audits.append(audit(df, "COMI-LINGUA LID"))
         crows, stats, schema = extract_comi_lid(df)
         rows.extend(crows)
